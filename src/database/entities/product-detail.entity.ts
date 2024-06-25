@@ -1,21 +1,25 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  Unique,
+} from 'typeorm';
+import { Product } from './product.entity';
 
 @Entity({ name: 'product_detail' })
+@Unique(['product', 'language'])
 export class ProductDetail {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ type: 'varchar', length: 255, nullable: false })
-  ean: string;
-
-  @Column({ type: 'varchar', length: 255, nullable: false })
   language: string;
 
-  @Column({ type: 'text', nullable: false })
-  title: string;
-
-  @Column({ type: 'text', nullable: true })
-  description: string;
+  @ManyToOne(() => Product, (product) => product.details, { nullable: false })
+  @JoinColumn({ name: 'product_id' })
+  product: Product;
 
   @Column({ type: 'text', nullable: true })
   source: string;

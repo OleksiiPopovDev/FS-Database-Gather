@@ -1,4 +1,5 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { ProductDetail } from './product-detail.entity';
 
 @Entity()
 export class Product {
@@ -28,4 +29,7 @@ export class Product {
 
   @Column({ type: 'text', nullable: true })
   detail_source: string;
+
+  @OneToMany(() => ProductDetail, (detail) => detail.product)
+  details: ProductDetail[];
 }

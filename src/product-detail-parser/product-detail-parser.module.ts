@@ -3,16 +3,22 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Product } from '../database/entities/product.entity';
 import { ProductDetail } from '../database/entities/product-detail.entity';
 import { ProductDetailParserCommand } from './product-detail-parser.command';
-import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
+import { GetProductListTask } from './tasks/get-product-list.task';
+import { RestApiModule } from '../rest-api/rest-api.module';
+import { SaveProductDetailTask } from './tasks/save-product-detail.task';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Product, ProductDetail]),
-    HttpModule,
+    RestApiModule,
     ConfigModule,
   ],
-  controllers: [],
-  providers: [Logger, ProductDetailParserCommand],
+  providers: [
+    Logger,
+    ProductDetailParserCommand,
+    GetProductListTask,
+    SaveProductDetailTask,
+  ],
 })
 export class ProductDetailParserModule {}

@@ -2,11 +2,11 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Product } from './entities/product.entity';
 import { ProductDetail } from './entities/product-detail.entity';
-import { TypeOrmCoreModule } from '@nestjs/typeorm/dist/typeorm-core.module';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
 @Module({
   imports: [
-    TypeOrmCoreModule.forRootAsync({
+    TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: async (config: ConfigService) => ({
@@ -17,7 +17,10 @@ import { TypeOrmCoreModule } from '@nestjs/typeorm/dist/typeorm-core.module';
         password: config.get<string>('MYSQL_PASS'),
         database: config.get<string>('DB_NAME'),
         entities: [Product, ProductDetail],
-        synchronize: true,
+        synchronize: false,
+        logging: false,
+        retryAttempts: 0,
+        retryDelay: 0,
       }),
     }),
   ],

@@ -1,14 +1,12 @@
 import { Logger } from '@nestjs/common';
 import { Command, CommandRunner } from 'nest-commander';
-import { InjectRepository } from '@nestjs/typeorm';
 import { Product } from '../database/entities/product.entity';
-import { ProductDetail } from '../database/entities/product-detail.entity';
-import { Repository } from 'typeorm';
-import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { Promise } from 'bluebird';
-import { firstValueFrom } from 'rxjs';
-import { HttpRequestType } from './type/product-detail.type';
+import { Promise as BluebirdPromise } from 'bluebird';
+import { HttpRequestType, HttpResponseType } from './types/product-detail.type';
+import { GetProductListTask } from './tasks/get-product-list.task';
+import { RequesterService } from '../rest-api/requester.service';
+import { SaveProductDetailTask } from './tasks/save-product-detail.task';
 
 @Command({
   name: 'product-detail-parse',
@@ -16,71 +14,100 @@ import { HttpRequestType } from './type/product-detail.type';
 })
 export class ProductDetailParserCommand extends CommandRunner {
   constructor(
-    @InjectRepository(Product)
-    private readonly productRepository: Repository<Product>,
-    @InjectRepository(ProductDetail)
-    private readonly productDetailRepository: Repository<ProductDetail>,
-    private readonly httpService: HttpService,
-    private readonly config: ConfigService,
+    private readonly getProductListTask: GetProductListTask,
+    private readonly requesterService: RequesterService,
+    private readonly saveProductDetailTask: SaveProductDetailTask,
+    private readonly configService: ConfigService,
     private readonly logger: Logger,
   ) {
     super();
   }
+
   public async run() {
-    const products = await this.productRepository.find({ take: 10 });
+    try {
+      const products = await this.getProductListTask.run();
+      const promiseConfig = { concurrency: this.getQueueLength() };
 
-    const task = async (request: HttpRequestType) => {
-      const response = await firstValueFrom(
-        this.httpService.get(request.url, request.config),
+      await BluebirdPromise.map(products, this.taskHandler, promiseConfig);
+    } catch (error) {
+      this.logger.error(
+        'Error in running the product detail parser command',
+        error.message,
       );
-      const requestTimeout = Number(this.config.get<number>('REQUEST_TIMEOUT'));
-      this.logger.warn(
-        `EAN: ${response.data.product.ean}; Title: ${response.data.product.title}`,
-      );
-
-      const responseData = response?.data?.product;
-
-      if (!responseData) {
-        throw new Error('No data');
-      }
-
-      const productDetail = new ProductDetail();
-      productDetail.ean = response.data.product.ean;
-      productDetail.language = request.config.headers['Accept-Language'];
-      productDetail.title = response.data.product.title;
-      productDetail.description = response.data.product.description;
-      productDetail.source = JSON.stringify(response.data.product);
-
-      await this.productDetailRepository
-        .save(productDetail)
-        .catch((error) => this.logger.error(error.message));
-      await Promise.delay(requestTimeout);
-    };
-
-    const queueLength: number = Number(
-      this.config.get<number>('REQUEST_QUEUE_LENGTH'),
-    );
-    const promiseConfig = { concurrency: queueLength || 10 };
-
-    await Promise.map(this.prepareRequests(products), task, promiseConfig);
+    }
   }
 
-  private prepareRequests(products: Product[]): HttpRequestType[] {
-    const sourceUrl = this.config.get<string>('SOURCE_PRODUCT_URL');
-    const languageList = this.config
-      .get<string>('SOURCE_LANGUAGES')
-      ?.replaceAll(' ', '')
-      ?.toLowerCase()
-      ?.split(',');
+  private getQueueLength(): number {
+    return Number(this.configService.get<number>('REQUEST_QUEUE_LENGTH')) || 10;
+  }
 
-    return products.flatMap((product: Product): HttpRequestType[] => {
-      const url = sourceUrl
-        .replace('{STORE_ID}', product.storeId)
-        .replace('{EAN}', product.ean);
+  private readonly taskHandler = async (product: Product) => {
+    try {
+      const requests = this.prepareRequests(product);
 
-      return languageList.map((lang): HttpRequestType => {
-        return { url: url, config: { headers: { 'Accept-Language': lang } } };
-      });
+      for (const request of requests) {
+        const response = await this.fetchProductDetails(request);
+        await this.saveProductDetails(product, request.language, response);
+      }
+
+      await this.delay();
+    } catch (error) {
+      this.logger.error('Error in processing product', error.message);
+    }
+  };
+
+  private async fetchProductDetails(
+    request: HttpRequestType,
+  ): Promise<HttpResponseType> {
+    return await this.requesterService.get<HttpResponseType>(request);
+  }
+
+  private async saveProductDetails(
+    product: Product,
+    language: string,
+    response: HttpResponseType,
+  ) {
+    const productDetail = await this.saveProductDetailTask.run(
+      product,
+      language,
+      JSON.stringify(response),
+    );
+
+    this.logger.log(
+      `Saved product detail for product ID: ${productDetail.product.id}, Language: ${productDetail.language}`,
+    );
+  }
+
+  private prepareRequests(product: Product): HttpRequestType[] {
+    const sourceUrl = this.configService.get<string>('SOURCE_PRODUCT_URL');
+    const languageList = this.getLanguageList();
+
+    const url = sourceUrl
+      .replace('{STORE_ID}', product.storeId)
+      .replace('{EAN}', product.ean);
+
+    return languageList.map((lang): HttpRequestType => {
+      return {
+        language: lang,
+        url: url,
+        config: { headers: { 'Accept-Language': lang } },
+      };
     });
+  }
+
+  private getLanguageList(): string[] {
+    return (
+      this.configService
+        .get<string>('SOURCE_LANGUAGES')
+        ?.replaceAll(' ', '')
+        ?.toLowerCase()
+        ?.split(',') || []
+    );
+  }
+
+  private async delay() {
+    await BluebirdPromise.delay(
+      Number(this.configService.get<number>('REQUEST_TIMEOUT')),
+    );
   }
 }
