@@ -14,7 +14,7 @@ export class SaveProductDetailTask {
   public async run(
     product: Product,
     language: string,
-    source: string,
+    source: any,
   ): Promise<ProductDetail> {
     const productDetail = new ProductDetail();
     productDetail.product = product;

@@ -24,12 +24,12 @@ export class Product {
   @Column({ type: 'varchar', length: 255, nullable: true })
   carbohydrates: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'json', nullable: true })
   source: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'json', nullable: true })
   detail_source: string;
 
   @OneToMany(() => ProductDetail, (detail) => detail.product)
-  details: ProductDetail[];
+  details?: ProductDetail[];
 }

@@ -21,6 +21,6 @@ export class ProductDetail {
   @JoinColumn({ name: 'product_id' })
   product: Product;
 
-  @Column({ type: 'text', nullable: true })
-  source: string;
+  @Column({ type: 'json', nullable: true })
+  source: any;
 }

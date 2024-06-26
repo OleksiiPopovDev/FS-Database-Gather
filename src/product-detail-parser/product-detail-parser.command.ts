@@ -3,10 +3,11 @@ import { Command, CommandRunner } from 'nest-commander';
 import { Product } from '../database/entities/product.entity';
 import { ConfigService } from '@nestjs/config';
 import { Promise as BluebirdPromise } from 'bluebird';
-import { HttpRequestType, HttpResponseType } from './types/product-detail.type';
+import { HttpRequestType } from './types/product-detail.type';
 import { GetProductListTask } from './tasks/get-product-list.task';
 import { RequesterService } from '../rest-api/requester.service';
 import { SaveProductDetailTask } from './tasks/save-product-detail.task';
+import * as cliProgress from 'cli-progress';
 
 @Command({
   name: 'product-detail-parse',
@@ -22,18 +23,34 @@ export class ProductDetailParserCommand extends CommandRunner {
   ) {
     super();
   }
-
+  private readonly progressBar = new cliProgress.SingleBar(
+    {
+      format:
+        'Progress |{bar}| {percentage}% || {value}/{total} Chunks || ETA: {eta_formatted}',
+      barCompleteChar: '\u2588',
+      barIncompleteChar: '\u2591',
+      hideCursor: true,
+    },
+    cliProgress.Presets.shades_classic,
+  );
   public async run() {
     try {
-      const products = await this.getProductListTask.run();
+      this.logger.log('Counting the number of products...');
+      const productsCount = await this.getProductListTask.count();
+      this.progressBar.start(productsCount, 0);
+      const productsGenerator = this.getProductListTask.run();
       const promiseConfig = { concurrency: this.getQueueLength() };
 
-      await BluebirdPromise.map(products, this.taskHandler, promiseConfig);
+      for await (const products of productsGenerator) {
+        await BluebirdPromise.map(products, this.taskHandler, promiseConfig);
+      }
+      this.progressBar.stop();
     } catch (error) {
       this.logger.error(
         'Error in running the product detail parser command',
         error.message,
       );
+      this.progressBar.stop();
     }
   }
 
@@ -45,38 +62,25 @@ export class ProductDetailParserCommand extends CommandRunner {
     try {
       const requests = this.prepareRequests(product);
 
-      for (const request of requests) {
-        const response = await this.fetchProductDetails(request);
-        await this.saveProductDetails(product, request.language, response);
-      }
-
+      // for (const request of requests) {
+      //   const response =
+      //     await this.requesterService.get<HttpResponseType>(request);
+      //   const productDetail = await this.saveProductDetailTask.run(
+      //     product,
+      //     request.language,
+      //     response,
+      //   );
+      //
+      //   this.logger.log(
+      //     `Saved product detail for product ID: ${productDetail.product.id}, Language: ${productDetail.language}`,
+      //   );
+      // }
+      this.progressBar.increment();
       await this.delay();
     } catch (error) {
       this.logger.error('Error in processing product', error.message);
     }
   };
-
-  private async fetchProductDetails(
-    request: HttpRequestType,
-  ): Promise<HttpResponseType> {
-    return await this.requesterService.get<HttpResponseType>(request);
-  }
-
-  private async saveProductDetails(
-    product: Product,
-    language: string,
-    response: HttpResponseType,
-  ) {
-    const productDetail = await this.saveProductDetailTask.run(
-      product,
-      language,
-      JSON.stringify(response),
-    );
-
-    this.logger.log(
-      `Saved product detail for product ID: ${productDetail.product.id}, Language: ${productDetail.language}`,
-    );
-  }
 
   private prepareRequests(product: Product): HttpRequestType[] {
     const sourceUrl = this.configService.get<string>('SOURCE_PRODUCT_URL');
