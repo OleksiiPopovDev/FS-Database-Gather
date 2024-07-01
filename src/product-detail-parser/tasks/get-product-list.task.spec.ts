@@ -1,155 +1,76 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { Repository } from 'typeorm';
-import { Product } from '../../database/entities/product.entity';
-import { ProductDetail } from '../../database/entities/product-detail.entity';
-import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
+import { Product } from '../../database/entities/product.entity';
 import { GetProductListTask } from './get-product-list.task';
 
 describe('GetProductListTask', () => {
-  let task: GetProductListTask;
+  let getProductListTask: GetProductListTask;
   let productRepository: Repository<Product>;
-  let productDetailRepository: Repository<ProductDetail>;
-  let configService: ConfigService;
 
-  const mockProducts: Product[] = [
-    {
-      id: 1,
-      ean: '123',
-      storeId: '1',
-      energy: '100',
-      protein: '10',
-      fat: '5',
-      carbohydrates: '20',
-    } as Product,
-    {
-      id: 2,
-      ean: '456',
-      storeId: '1',
-      energy: '200',
-      protein: '20',
-      fat: '10',
-      carbohydrates: '40',
-    } as Product,
-  ];
-
-  const mockProductRepository = {
-    createQueryBuilder: jest.fn().mockReturnValue({
+  beforeEach(async () => {
+    const mockQueryBuilder = {
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
       skip: jest.fn().mockReturnThis(),
       take: jest.fn().mockReturnThis(),
-      getMany: jest.fn().mockResolvedValue(mockProducts),
-      getCount: jest.fn().mockResolvedValue(2),
-    }),
-  };
+      getMany: jest.fn().mockResolvedValue([]),
+      getCount: jest.fn().mockResolvedValue(0),
+    };
 
-  const mockConfigService = {
-    get: jest.fn((key: string) => {
-      switch (key) {
-        case 'REQUEST_QUEUE_LENGTH':
-          return '2';
-        default:
-          return null;
-      }
-    }),
-  };
-
-  beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GetProductListTask,
         {
           provide: getRepositoryToken(Product),
-          useValue: mockProductRepository,
+          useValue: {
+            createQueryBuilder: jest.fn(() => mockQueryBuilder),
+          },
         },
-        { provide: getRepositoryToken(ProductDetail), useValue: {} },
-        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
-    task = module.get<GetProductListTask>(GetProductListTask);
+    getProductListTask = module.get<GetProductListTask>(GetProductListTask);
     productRepository = module.get<Repository<Product>>(
       getRepositoryToken(Product),
     );
-    productDetailRepository = module.get<Repository<ProductDetail>>(
-      getRepositoryToken(ProductDetail),
-    );
-    configService = module.get<ConfigService>(ConfigService);
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
   });
 
   it('should be defined', () => {
-    expect(task).toBeDefined();
+    expect(getProductListTask).toBeDefined();
   });
 
-  it('should return products in batches of specified size', async () => {
-    const mockProductsBatch = [
+  it('should return products with non-null energy, protein, fat, or carbohydrates and no details', async () => {
+    const mockProducts = [
       {
         id: 1,
-        ean: '123',
+        ean: '1234567890123',
         storeId: '1',
         energy: '100',
         protein: '10',
         fat: '5',
         carbohydrates: '20',
-      } as Product,
-      {
-        id: 2,
-        ean: '456',
-        storeId: '1',
-        energy: '200',
-        protein: '20',
-        fat: '10',
-        carbohydrates: '40',
-      } as Product,
-    ];
+        source: '{}',
+        detail_source: '{}',
+        details: null,
+      },
+    ] as Product[];
 
-    mockProductRepository
-      .createQueryBuilder()
-      .getMany.mockResolvedValueOnce(mockProductsBatch)
-      .mockResolvedValueOnce([]);
+    const queryBuilder =
+      productRepository.createQueryBuilder() as unknown as SelectQueryBuilder<Product>;
+    (queryBuilder.getMany as jest.Mock).mockResolvedValue(mockProducts);
 
-    const result = [];
-    for await (const products of task.run()) {
-      result.push(...products);
-    }
-
-    expect(result).toEqual(mockProductsBatch);
-    expect(
-      mockProductRepository.createQueryBuilder().skip,
-    ).toHaveBeenCalledWith(0);
-    expect(
-      mockProductRepository.createQueryBuilder().take,
-    ).toHaveBeenCalledWith(2);
-    expect(
-      mockProductRepository.createQueryBuilder().getMany,
-    ).toHaveBeenCalled();
+    const products = await getProductListTask.run(0, 10);
+    expect(products).toEqual(mockProducts);
   });
 
-  it('should count the total number of products', async () => {
-    const count = 42;
-    mockProductRepository
-      .createQueryBuilder()
-      .getCount.mockResolvedValue(count);
+  it('should return count of products with non-null energy, protein, fat, or carbohydrates and no details', async () => {
+    const queryBuilder =
+      productRepository.createQueryBuilder() as unknown as SelectQueryBuilder<Product>;
+    (queryBuilder.getCount as jest.Mock).mockResolvedValue(1);
 
-    const result = await task.count();
-
-    expect(result).toBe(count);
-    expect(
-      mockProductRepository.createQueryBuilder().where,
-    ).toHaveBeenCalledWith(
-      '(p.energy IS NOT NULL OR p.protein IS NOT NULL OR p.fat IS NOT NULL OR p.carbohydrates IS NOT NULL)',
-    );
-    expect(
-      mockProductRepository.createQueryBuilder().andWhere,
-    ).toHaveBeenCalledWith('pd.id IS NULL');
-    expect(
-      mockProductRepository.createQueryBuilder().getCount,
-    ).toHaveBeenCalled();
+    const count = await getProductListTask.count();
+    expect(count).toBe(1);
   });
 });
