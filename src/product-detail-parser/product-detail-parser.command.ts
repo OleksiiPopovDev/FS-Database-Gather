@@ -70,7 +70,6 @@ export class ProductDetailParserCommand extends CommandRunner {
 
       const requests = this.prepareRequests(product);
       for (const request of requests) {
-        // console.log(JSON.stringify(request));
         const response = await this.fetchProductDetails(request);
         await this.saveProductDetails(product, request.language, response);
       }
@@ -100,9 +99,9 @@ export class ProductDetailParserCommand extends CommandRunner {
       JSON.stringify(response),
     );
 
-    this.logger.log(
-      `Saved product detail for product ID: ${productDetail.product.id}, Language: ${productDetail.language}`,
-    );
+    // this.logger.log(
+    //   `Saved product detail for product ID: ${productDetail.product.id}, Language: ${productDetail.language}`,
+    // );
   }
 
   private prepareRequests(product: Product): HttpRequestType[] {
