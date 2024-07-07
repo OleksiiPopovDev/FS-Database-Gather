@@ -23,7 +23,8 @@ export class ProductDetailParserCommand extends CommandRunner {
   ) {
     super();
   }
-  private totalProcessed: number = 0;
+  private currentProcessed: number = 0;
+  private processedRecords: number = 0;
   private progressBar: cliProgress.SingleBar;
 
   public async run() {
@@ -37,12 +38,15 @@ export class ProductDetailParserCommand extends CommandRunner {
       });
 
       this.logger.log('Counting total number of products...');
-      const totalRecords = await this.getProductListTask.count();
+      this.processedRecords = await this.getProductListTask.countProcesses();
+      const unprocessedRecords = await this.getProductListTask.count();
+      const totalRecords = this.processedRecords + unprocessedRecords;
       this.progressBar.start(totalRecords, 0);
+      this.progressBar.update(this.processedRecords);
 
-      while (this.totalProcessed < totalRecords) {
+      while (this.currentProcessed < unprocessedRecords) {
         const products = await this.getProductListTask.run(
-          this.totalProcessed,
+          this.currentProcessed,
           this.getQueueLength(),
         );
         await BluebirdPromise.map(products, this.taskHandler, {
@@ -65,8 +69,8 @@ export class ProductDetailParserCommand extends CommandRunner {
 
   private readonly taskHandler = async (product: Product) => {
     try {
-      this.totalProcessed++;
-      this.progressBar.update(this.totalProcessed);
+      this.currentProcessed++;
+      this.progressBar.update(this.processedRecords + this.currentProcessed);
 
       const requests = this.prepareRequests(product);
       for (const request of requests) {

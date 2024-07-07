@@ -23,4 +23,15 @@ export class GetProductListTask {
   public async count(): Promise<number> {
     return await this.baseQuery.getCount();
   }
+
+  public async countProcesses(): Promise<number> {
+    return await this.productRepository
+      .createQueryBuilder('p')
+      .leftJoinAndSelect('p.details', 'pd')
+      .where(
+        '(p.energy IS NOT NULL OR p.protein IS NOT NULL OR p.fat IS NOT NULL OR p.carbohydrates IS NOT NULL)',
+      )
+      .andWhere('pd.id IS NOT NULL')
+      .getCount();
+  }
 }
