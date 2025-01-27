@@ -1,7 +1,7 @@
 import { HttpService } from '@nestjs/axios';
-import { HttpRequestType } from '../product-detail-parser/types/product-detail.type';
 import { firstValueFrom } from 'rxjs';
 import { Injectable } from '@nestjs/common';
+import { HttpRequestType } from './types/http-request.type';
 
 @Injectable()
 export class RequesterService {

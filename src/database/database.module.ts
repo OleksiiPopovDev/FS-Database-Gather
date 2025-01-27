@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Product } from './entities/product.entity';
 import { ProductDetail } from './entities/product-detail.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { MongooseModule } from '@nestjs/mongoose';
 
 @Module({
   imports: [
@@ -21,6 +22,15 @@ import { TypeOrmModule } from '@nestjs/typeorm';
         logging: false,
         retryAttempts: 0,
         retryDelay: 0,
+      }),
+    }),
+
+    MongooseModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (config: ConfigService) => ({
+        uri: config.get<string>('MONGO_URI'),
+        ignoreUndefined: true,
       }),
     }),
   ],

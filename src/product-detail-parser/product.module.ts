@@ -21,4 +21,4 @@ import { SaveProductDetailTask } from './tasks/save-product-detail.task';
     SaveProductDetailTask,
   ],
 })
-export class ProductDetailParserModule {}
+export class ProductModule {}

@@ -7,7 +7,8 @@ import { SaveProductDetailTask } from './tasks/save-product-detail.task';
 import { Product } from '../database/entities/product.entity';
 import { Promise as BluebirdPromise } from 'bluebird';
 import * as cliProgress from 'cli-progress';
-import { HttpRequestType, HttpResponseType } from './types/product-detail.type';
+import { HttpResponseType } from './types/product-detail.type';
+import { HttpRequestType } from '../rest-api/types/http-request.type';
 
 @Command({
   name: 'product-detail-parse',
